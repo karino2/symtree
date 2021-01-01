@@ -40,7 +40,8 @@ enum class test_sym
   int_imm,
   variable,
   sub,
-  add
+  add,
+  let
 };
 
 struct enum_formatter
@@ -57,6 +58,8 @@ struct enum_formatter
         return "sub";
       case test_sym::add:
         return "add";
+      case test_sym::let:
+        return "let";
     }
   }
 };
@@ -73,10 +76,13 @@ inline std::string ttree_dump(ttree& root)
   return stree_dump<test_sym, enum_formatter>(root);
 } 
 
+using var_op = taccessor<test_sym::variable, string>;
 using int_imm = taccessor<test_sym::int_imm, int64_t>;
 using add_op = taccessor<test_sym::add, ttree, ttree>;
 using sub_op = taccessor<test_sym::sub, ttree, ttree>;
 
+// var_op=tree1 in ttree2.
+using let_op = taccessor<test_sym::let, var_op, ttree, ttree>;
 
 struct expr
 {
@@ -207,6 +213,50 @@ static std::vector<TestPair> test_cases1 = {
 
   expr root_expr(*root);
   REQUIRE( 6 == root_expr.eval() );
+
+}},
+{"let accessorのテスト", []{
+  ttree_builder builder;
+
+  // let x = 3+4 in x+5
+  builder.create_root(test_sym::let);
+  {
+    auto with_guard = builder.append_with(test_sym::variable);
+    builder.append("x");
+  }
+  // value
+  {
+    auto with_guard = builder.append_with(test_sym::add);
+    {
+      auto with2 = builder.append_with(test_sym::int_imm);
+      builder.append(3);
+    }
+    {
+      auto with2 = builder.append_with(test_sym::int_imm);
+      builder.append(4);
+    }
+  }
+  // body
+  {
+    auto with_guard = builder.append_with(test_sym::add);
+    {
+      auto with2 = builder.append_with(test_sym::variable);
+      builder.append("x");
+    }
+    {
+      auto with2 = builder.append_with(test_sym::int_imm);
+      builder.append(5);
+    }
+  }
+
+  auto root = builder._root;
+  let_op op1(*root);
+  auto v = get<0>(op1);
+  auto& value = get<1>(op1);
+  auto& body = get<2>(op1);
+
+  REQUIRE( "x" == get<0>(v) );
+
 
 }}
 };

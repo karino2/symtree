@@ -372,7 +372,7 @@ struct _accessor_leaf<EN, IDX, accessor<EN, eid, CHLDS...> > : _accessor_leaf_ba
 
 
 template<size_t IDX, typename ENUMTYPE, ENUMTYPE eid, typename ...TP, 
-        typename = typename std::enable_if< !std::is_integral<typename select<IDX, TP...>::type>::value >::type>
+        typename = typename std::enable_if< std::is_same<typename select<IDX, TP...>::type, stree<ENUMTYPE>>::value >::type>
 typename select<IDX, TP...>::type&
 get(accessor<ENUMTYPE, eid, TP...>& ac)
 {
@@ -382,7 +382,7 @@ get(accessor<ENUMTYPE, eid, TP...>& ac)
 }
 
 template<size_t IDX, typename ENUMTYPE, ENUMTYPE eid, typename ...TP,
-        typename = typename std::enable_if< std::is_integral<typename select<IDX, TP...>::type>::value >::type>
+        typename = typename std::enable_if< !std::is_same<typename select<IDX, TP...>::type, stree<ENUMTYPE>>::value >::type>
 typename select<IDX, TP...>::type
 get(accessor<ENUMTYPE, eid, TP...>& ac)
 {
