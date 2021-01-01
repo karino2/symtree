@@ -6,6 +6,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <tuple>
 
 using namespace std;
 using namespace symtree;
@@ -62,10 +63,20 @@ struct enum_formatter
 
 using ttree = stree<test_sym>;
 using ttree_builder = stree_builder<test_sym>;
-std::string ttree_dump(ttree& root)
+using tatom = atom<test_sym>;
+
+template<test_sym eid, typename... CHLDS>
+using taccessor = accessor<test_sym, eid, CHLDS...>;
+
+inline std::string ttree_dump(ttree& root)
 {
   return stree_dump<test_sym, enum_formatter>(root);
 } 
+
+using int_imm = taccessor<test_sym::int_imm, int64_t>;
+using add_op = taccessor<test_sym::add, ttree, ttree>;
+using sub_op = taccessor<test_sym::sub, ttree, ttree>;
+
 
 static std::vector<TestPair> test_cases1 = {
 {"stree_builderの簡単なテスト", []{
@@ -110,10 +121,55 @@ static std::vector<TestPair> test_cases1 = {
   // check_string_equals( expect, actual );
   // cout << actual << endl;
   REQUIRE( expect == actual );
+}},
+{"accessorのテスト", []{
+  ttree_builder builder;
+
+  builder.create_root(test_sym::add);
+  {
+    auto with_guard = builder.append_with(test_sym::int_imm);
+    builder.append(3);
+  }
+  {
+    auto with_guard = builder.append_with(test_sym::sub);
+    {
+      auto with2 = builder.append_with(test_sym::int_imm);
+      builder.append(7);
+    }
+    {
+      auto with2 = builder.append_with(test_sym::int_imm);
+      builder.append(4);
+    }
+  }
+
+  auto root = builder._root;
+  add_op op1(*root);
+  auto& left = get<0>(op1);
+  auto& right = get<1>(op1);
+  
+  REQUIRE( tatom::enumval == left._data._type);
+  REQUIRE( test_sym::int_imm == left._data._value._enumval);
+  
+  int_imm op2(left);
+  auto actual1 = get<0>(op2);
+  REQUIRE( actual1 == 3);
+
+
+  REQUIRE( tatom::enumval == right._data._type);
+  REQUIRE( test_sym::sub == right._data._value._enumval);
+
+  sub_op op3(right);
+  int_imm op3_left(get<0>(op3));
+  int_imm op3_right(get<1>(op3));
+  REQUIRE( 7 == get<0>(op3_left) );
+  REQUIRE( 4 == get<0>(op3_right) );
+
+
 }}
 };
 
 void register_symtree_test(std::vector<TestPair>& testCases)
 {
+    tuple<int, std::string> test;
   testCases.insert(testCases.end(), test_cases1.begin(), test_cases1.end());
 }

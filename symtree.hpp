@@ -31,7 +31,7 @@ struct typed_num
 template<typename ENUMTYPE>
 struct atom
 {
-    enum class atom_type
+    enum atom_type
     {
         numval,
         enumval,
@@ -252,6 +252,144 @@ scoped_iterator<ENUMTYPE>::~scoped_iterator()
     tree->go_up();
 }
 
+//
+// accessor related
+//
+
+template<size_t N, typename... Ts>
+struct select;
+
+template<size_t N, typename T, typename... RESTs>
+struct select<N, T, RESTs...> : select<N-1, RESTs...> {};
+
+template<typename T, typename... RESTs>
+struct select<0, T, RESTs...>
+{
+    using type = T;
+};
+
+
+template<typename EN>
+struct _accessor_leaf_base
+{
+    _accessor_leaf_base(stree<EN>& ) {}
+};
+
+template<typename EN, size_t IDX, typename T>
+struct _accessor_leaf;
+
+
+template<typename EN, size_t IDX>
+struct _accessor_leaf<EN, IDX, int64_t> : _accessor_leaf_base<EN>
+{
+    _accessor_leaf(stree<EN>& node) : _accessor_leaf_base<EN>(node) {}
+    int64_t to_value(stree<EN>& node)
+    {
+        using atom_ = atom<EN>;
+        assert( node._data._type == atom_::numval );
+        return (int64_t)node._data._value._numval._value;
+    }
+};
+
+template<typename EN, size_t IDX>
+struct _accessor_leaf<EN, IDX, uint64_t> : _accessor_leaf_base<EN>
+{
+    _accessor_leaf(stree<EN>& node) : _accessor_leaf_base<EN>(node) {}
+    uint64_t to_value(stree<EN>& node)
+    {
+        using atom_ = atom<EN>;
+        assert( node._data._type == atom_::numval );
+        return node._data._value._numval._value;
+    }
+};
+
+template<typename EN, size_t IDX>
+struct _accessor_leaf<EN, IDX, std::string> : _accessor_leaf_base<EN>
+{
+    _accessor_leaf(stree<EN>& node) : _accessor_leaf_base<EN>(node) {}
+    std::string& to_value(stree<EN>& node)
+    {
+        using atom_ = atom<EN>;
+        assert( node._data._type == atom_::stringval );
+        return *node._data._value._stringval;
+    }
+};
+
+// 汎用のノード。getした側がいろいろ中身を見て判断する。
+template<typename EN, size_t IDX>
+struct _accessor_leaf<EN, IDX, stree<EN>> : _accessor_leaf_base<EN>
+{
+    _accessor_leaf(stree<EN>& node) : _accessor_leaf_base<EN>(node) {}
+    stree<EN>& to_value(stree<EN>& node)
+    {
+        return node;
+    }
+};
+
+template<typename ENUMTYPE, typename IDX, typename... CHLDS>
+struct _accessor_impl;
+
+template<typename EN, size_t ...IDX, typename ... TP>
+struct _accessor_impl<EN, std::index_sequence<IDX...>, TP...>
+    :public _accessor_leaf<EN, IDX, TP>...
+{
+    _accessor_impl(stree<EN>& node) : _accessor_leaf<EN, IDX, TP>(node)... {}
+};
+
+
+template<typename ENUMTYPE, ENUMTYPE eid, typename... CHLDS>
+struct accessor
+{
+    using base_t 
+        = _accessor_impl<ENUMTYPE, std::make_index_sequence<sizeof...(CHLDS)>, CHLDS...>;
+    base_t _base;
+    stree<ENUMTYPE>& _target;
+
+    accessor(stree<ENUMTYPE>& node) : _base(node), _target(node) {}
+
+    stree<ENUMTYPE>* nth_child( size_t nth )
+    {
+        return _target.nth_child( (int)nth );
+    }
+
+};
+
+
+template<typename EN, size_t IDX, EN eid, typename... CHLDS>
+struct _accessor_leaf<EN, IDX, accessor<EN, eid, CHLDS...> > : _accessor_leaf_base<EN>
+{
+    using accessor_ = accessor<EN, eid, CHLDS...>;
+    _accessor_leaf(stree<EN>& node) : _accessor_leaf_base<EN>(node) {}
+    accessor_ to_value(stree<EN>& node)
+    {
+        using atom_ = atom<EN>;
+
+        assert( node._data._type == atom_::enumval );
+        assert( node._data._value._enumval == eid );
+        return accessor_(node);
+    }
+};
+
+
+template<size_t IDX, typename ENUMTYPE, ENUMTYPE eid, typename ...TP, 
+        typename = typename std::enable_if< !std::is_integral<typename select<IDX, TP...>::type>::value >::type>
+typename select<IDX, TP...>::type&
+get(accessor<ENUMTYPE, eid, TP...>& ac)
+{
+    using type = typename select<IDX, TP...>::type;
+    auto target = ac.nth_child(IDX);
+    return static_cast<_accessor_leaf<ENUMTYPE, IDX, type>&>(ac._base).to_value(*target);
+}
+
+template<size_t IDX, typename ENUMTYPE, ENUMTYPE eid, typename ...TP,
+        typename = typename std::enable_if< std::is_integral<typename select<IDX, TP...>::type>::value >::type>
+typename select<IDX, TP...>::type
+get(accessor<ENUMTYPE, eid, TP...>& ac)
+{
+    using type = typename select<IDX, TP...>::type;
+    auto target = ac.nth_child(IDX);
+    return static_cast<_accessor_leaf<ENUMTYPE, IDX, type>&>(ac._base).to_value(*target);
+}
 
 }
 #endif
