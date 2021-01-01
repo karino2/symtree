@@ -78,6 +78,47 @@ using add_op = taccessor<test_sym::add, ttree, ttree>;
 using sub_op = taccessor<test_sym::sub, ttree, ttree>;
 
 
+struct expr
+{
+    ttree& _node;
+    test_sym _type;
+    expr(ttree& node) : _node(node), _type(_node._data._value._enumval)
+    {
+        assert(node._data._type == tatom::enumval);    
+    }
+
+    template<typename OP, typename FN>
+    int eval_binop(FN fn)
+    {
+        OP op(_node);
+        expr left(get<0>(op));
+        expr right(get<1>(op));
+        return fn(left.eval(), right.eval());
+
+    }
+
+    int eval()
+    {
+        switch(_type)
+        {
+            case test_sym::int_imm:
+            {
+                int_imm op(_node);
+                return get<0>(op);
+            }
+            case test_sym::add:
+                return eval_binop<add_op>( [](int a, int b) { return a+b; } );
+
+            case test_sym::sub:
+                return eval_binop<sub_op>( [](int a, int b) { return a-b; } );
+
+            default:
+                assert(false);
+                throw std::runtime_error("never reached here");
+        }
+    }
+};
+
 static std::vector<TestPair> test_cases1 = {
 {"stree_builderの簡単なテスト", []{
   auto expect = R"(<enum:add>
@@ -146,7 +187,7 @@ static std::vector<TestPair> test_cases1 = {
   add_op op1(*root);
   auto& left = get<0>(op1);
   auto& right = get<1>(op1);
-  
+
   REQUIRE( tatom::enumval == left._data._type);
   REQUIRE( test_sym::int_imm == left._data._value._enumval);
   
@@ -164,6 +205,8 @@ static std::vector<TestPair> test_cases1 = {
   REQUIRE( 7 == get<0>(op3_left) );
   REQUIRE( 4 == get<0>(op3_right) );
 
+  expr root_expr(*root);
+  REQUIRE( 6 == root_expr.eval() );
 
 }}
 };
